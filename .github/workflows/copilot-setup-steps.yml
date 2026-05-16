@@ -1,0 +1,170 @@
+﻿name: "Copilot Setup Steps"
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+  pull_request:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+
+jobs:
+  copilot-setup-steps:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Install OS tools (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
+            Set-ExecutionPolicy Bypass -Scope Process -Force
+            [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
+            iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+          }
+          choco --version
+
+      - name: Install OS tools (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y ca-certificates curl gnupg lsb-release
+
+      - name: Install Docker (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install -y docker-desktop
+          choco install -y docker-compose
+          Start-Process -FilePath 'C:\Program Files\Docker\Docker\Docker Desktop.exe' -NoNewWindow -ErrorAction SilentlyContinue
+          docker --version || Write-Output "Docker not available yet"
+
+      - name: Install Docker (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get install -y docker.io docker-compose-plugin
+          docker --version || echo "Docker not available yet"
+
+      - name: Ensure Git is installed (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (-not (Get-Command git -ErrorAction SilentlyContinue)) { choco install -y git }
+          git --version
+
+      - name: Ensure Git is installed (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          git --version || sudo apt-get install -y git
+          git --version
+
+      - name: Install GitHub CLI (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { choco install -y gh }
+          gh --version
+
+      - name: Install GitHub CLI (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          if ! command -v gh >/dev/null 2>&1; then
+            curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+            sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
+            echo "deb [signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+            sudo apt-get update
+            sudo apt-get install -y gh
+          fi
+          gh --version
+
+      - name: Configure gh auth using token (non-interactive)
+        shell: bash
+        if: ${{ secrets.GITHUB_TOKEN || secrets.GH_PAT }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          if [ -n "${GITHUB_TOKEN}" ]; then
+            echo "${GITHUB_TOKEN}" | gh auth login --with-token || true
+          elif [ -n "${GH_PAT}" ]; then
+            echo "${GH_PAT}" | gh auth login --with-token || true
+          else
+            echo "No token provided"
+          fi
+
+      - name: Configure npm auth (if NPM_TOKEN provided) (Windows)
+        if: runner.os == 'Windows' && ${{ secrets.NPM_TOKEN }}
+        shell: pwsh
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          $content = "//registry.npmjs.org/:_authToken=${env:NPM_TOKEN}"
+          Set-Content -Path "$env:USERPROFILE\\.npmrc" -Value $content -Encoding UTF8
+          Write-Output "Wrote $env:USERPROFILE\\.npmrc"
+
+      - name: Configure npm auth (if NPM_TOKEN provided) (Linux)
+        if: runner.os == 'Linux' && ${{ secrets.NPM_TOKEN }}
+        shell: bash
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
+          echo "Wrote ~/.npmrc"
+
+      - name: Install Node.js (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (-not (Get-Command npm -ErrorAction SilentlyContinue)) { choco install -y nodejs-lts }
+          if (Get-Command refreshenv -ErrorAction SilentlyContinue) { refreshenv } else { Write-Output "refreshenv not available" }
+          node --version
+          npm --version
+
+      - name: Install Node.js (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          if ! command -v npm >/dev/null 2>&1; then
+            curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
+            sudo apt-get install -y nodejs
+          fi
+          node --version
+          npm --version
+
+      - name: Install database-data-management plugin (npm)
+        shell: bash
+        run: |
+          set -e
+          # Try primary package name then scoped fallback
+          if npm install -g database-data-management --no-audit --no-fund; then
+            echo "Installed database-data-management"
+          else
+            echo "Primary install failed, trying scoped package"
+            if npm install -g @awesome-copilot/database-data-management --no-audit --no-fund; then
+              echo "Installed @awesome-copilot/database-data-management"
+            else
+              echo "Both npm installs failed; check package name or registry access"
+            fi
+          fi
+
+      - name: Verify installation and tools
+        shell: bash
+        run: |
+          echo "Docker:"; docker --version || true
+          echo "Git:"; git --version || true
+          echo "GH:"; gh --version || true
+          echo "Node:"; node --version || true
+          echo "NPM global packages:"; npm ls -g --depth=0 || true

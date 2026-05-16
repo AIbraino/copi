@@ -53,8 +53,26 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          sudo apt-get install -y docker.io docker-compose-plugin
-          docker --version || echo "Docker not available yet"
+          set -e
+          # Install docker.io; don't fail the job if not available
+          if ! sudo apt-get install -y docker.io; then
+            echo "docker.io install failed or not available; continuing"
+          fi
+
+          # Try to install docker-compose-plugin if it's available in the apt cache
+          if apt-cache policy docker-compose-plugin >/dev/null 2>&1; then
+            if ! sudo apt-get install -y docker-compose-plugin; then
+              echo "docker-compose-plugin installation failed; continuing"
+            fi
+          else
+            echo "docker-compose-plugin not available on this runner; will skip"
+          fi
+
+          if command -v docker >/dev/null 2>&1; then
+            docker --version
+          else
+            echo "Docker not available yet"
+          fi
 
       - name: Ensure Git is installed (Windows)
         if: runner.os == 'Windows'

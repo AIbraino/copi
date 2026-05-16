@@ -43,10 +43,16 @@ jobs:
       - name: Install Docker (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
+        continue-on-error: true
         run: |
-          choco install -y docker-desktop
-          choco install -y docker-compose
-          Start-Process -FilePath 'C:\Program Files\Docker\Docker\Docker Desktop.exe' -NoNewWindow -ErrorAction SilentlyContinue
+          # Attempt to install Docker Desktop but don't fail the job if it times out or isn't supported on hosted runners
+          choco install -y docker-desktop --execution-timeout=0 || Write-Output "docker-desktop install failed or timed out; continuing"
+          choco install -y docker-compose --execution-timeout=0 || Write-Output "docker-compose install failed or timed out; continuing"
+          if (Test-Path 'C:\Program Files\Docker\Docker\Docker Desktop.exe') {
+            Start-Process -FilePath 'C:\Program Files\Docker\Docker\Docker Desktop.exe' -NoNewWindow -ErrorAction SilentlyContinue
+          } else {
+            Write-Output 'Docker Desktop executable not found; skipping Start-Process'
+          }
           docker --version || Write-Output "Docker not available yet"
 
       - name: Install Docker (Linux)

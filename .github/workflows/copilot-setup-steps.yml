@@ -92,7 +92,7 @@ jobs:
 
       - name: Configure gh auth using token (non-interactive)
         shell: bash
-        if: ${{ secrets.GITHUB_TOKEN || secrets.GH_PAT }}
+        if: secrets.GITHUB_TOKEN != '' || secrets.GH_PAT != ''
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_PAT: ${{ secrets.GH_PAT }}
@@ -106,7 +106,7 @@ jobs:
           fi
 
       - name: Configure npm auth (if NPM_TOKEN provided) (Windows)
-        if: runner.os == 'Windows' && ${{ secrets.NPM_TOKEN }}
+        if: runner.os == 'Windows' && secrets.NPM_TOKEN != ''
         shell: pwsh
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -116,7 +116,7 @@ jobs:
           Write-Output "Wrote $env:USERPROFILE\\.npmrc"
 
       - name: Configure npm auth (if NPM_TOKEN provided) (Linux)
-        if: runner.os == 'Linux' && ${{ secrets.NPM_TOKEN }}
+        if: runner.os == 'Linux' && secrets.NPM_TOKEN != ''
         shell: bash
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

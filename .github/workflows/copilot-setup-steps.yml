@@ -123,6 +123,7 @@ jobs:
           fi
 
       - name: Configure npm auth (if NPM_TOKEN provided) (Windows)
+        if: runner.os == 'Windows'
         shell: pwsh
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -132,6 +133,7 @@ jobs:
           Write-Output "Wrote $env:USERPROFILE\\.npmrc"
 
       - name: Configure npm auth (if NPM_TOKEN provided) (Linux)
+        if: runner.os == 'Linux'
         shell: bash
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
